@@ -89,7 +89,6 @@ char* getDestination(char Buffer[1000]){
   		if(pci[0] == '/'){
   			memcpy(temp, &pci[1], (strlen(pci)-1));
   			char *ip = (char*)malloc(sizeof(char)*100);
-            fprintf(stderr, "Destination: %s\n", temp);
   			if(hostname_to_ip(temp , ip) != 1)
   			   return ip;
             else
