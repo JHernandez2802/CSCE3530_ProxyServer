@@ -15,14 +15,15 @@ struct s_insults{
 } insults[SIZE];
 
 //Function declarations
-void addInsults(s_insults (&insults)[SIZE]);
-void printInsults(s_insults (&insults)[SIZE]);
-void replaceInsults(string (&mystr)[5], s_insults (&insults)[SIZE] );
+void addInsults(s_insults insults[]);
+void printInsults(s_insults insults[]);
+void replaceInsults(string mystr[], s_insults insults[] );
 
 int main(){
 	string mystr;
 	string testStr[5]={"Fuck","slap","bastard","Alcoholic","master"};
 
+	//strSize=testStr.size();
 	//Add the insults from the text file to 
 	//the array of structs
 	addInsults(insults);
@@ -57,7 +58,7 @@ int main(){
  *                  them to the insults struct array
  *  @param insults  Array of struct s_insults
  */
-void addInsults(s_insults (&insults)[SIZE]){
+void addInsults(s_insults insults[]){
 	//Variables
 	int x=0;
 	string data;
@@ -89,7 +90,7 @@ void addInsults(s_insults (&insults)[SIZE]){
  *    
  *  @param insults  Array of struct s_insults
  */
-void printInsults(s_insults (&insults)[SIZE]){
+void printInsults(s_insults insults[]){
 	cout<<"The insults in the array are:"<<endl;
 	for(int i=0;i<SIZE;i++)
 		cout<<insults[i].insult<<endl;
@@ -101,7 +102,7 @@ void printInsults(s_insults (&insults)[SIZE]){
  *
  *  @param insults  Array of struct s_insults
  */
-void replaceInsults(string (&mystr)[5], s_insults (&insults)[SIZE] ){
+void replaceInsults(string mystr[], s_insults insults[] ){
 	//cout<<"string size is "<<mystr[0].size()<<endl;
 	//string test="Alcoholic";
 	//int x=0;
