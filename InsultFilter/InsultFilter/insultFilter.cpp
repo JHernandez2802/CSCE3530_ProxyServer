@@ -4,46 +4,49 @@ using namespace std;
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <locale>
 #include <assert.h>
 
 //Size of insult list
-#define SIZE 256
+#define SIZE 246
 
 struct s_insults{
 	string insult;
 	int pos;
+	int strSize;
 } insults[SIZE];
 
 //Function declarations
 void addInsults(s_insults insults[]);
 void printInsults(s_insults insults[]);
-void replaceInsults(string mystr[], s_insults insults[] );
+void replaceInsults(string mystr[],int, s_insults insults[] );
 
 int main(){
 	string mystr;
-	string testStr[5]={"Fuck","slap","bastard","Alcoholic","master"};
+	string buff[5]={"Fuck","slap","bastard","Alcoholic","master"};
 
-	//strSize=testStr.size();
+	int buffSize=sizeof(buff)/sizeof(buff[0]);
+
 	//Add the insults from the text file to 
 	//the array of structs
 	addInsults(insults);
 
-	//Prints Insults out for verification
+	//Prints insult list out for verification purposes
 	//printInsults(insults);
-
+	
 	//Prints out words before replacing them
-	cout<<"Words in string array before replacement"<<endl;
+	cout<<"Words in buff array before replacement"<<endl;
 	for(int i=0;i<5;i++)
-		cout<<testStr[i]<<" ";
+		cout<<buff[i]<<" ";
 	cout<<"\n"<<endl;
 
 	//Replaces insults in test string
-	replaceInsults(testStr, insults);
+	replaceInsults(buff, buffSize, insults);
 
 	//Verifies insults have been replaced
-	cout<<"Words in string array after replacement"<<endl;
+	cout<<"Words in buff array after replacement"<<endl;
 	for(int i=0;i<5;i++)
-		cout<<testStr[i]<<" ";
+		cout<<buff[i]<<" ";
 	cout<<"\n"<<endl;
 
 	//Used to keep command prompt open in Visual Studio
@@ -62,11 +65,11 @@ void addInsults(s_insults insults[]){
 	//Variables
 	int x=0;
 	string data;
-     ifstream fin;
+	ifstream fin;
 
 	//Opens file
-     fin.open("insults.txt",ios::in);
-     assert (!fin.fail( ));    
+    fin.open("insults.txt",ios::in);
+    assert (!fin.fail( ));    
 
  /*    
 	getline(fin,data);
@@ -75,10 +78,11 @@ void addInsults(s_insults insults[]){
 */
 
 	//Reads from the file until the end of file
-     while ( !fin.eof( ) ){
+    while ( !fin.eof( ) ){
 		getline(fin,data);
-          insults[x].insult = data;
+        insults[x].insult = data;
 		insults[x].pos = 0;
+		insults[x].strSize = data.length();
 		x++;
      }
 	//Close the file
@@ -96,23 +100,34 @@ void printInsults(s_insults insults[]){
 		cout<<insults[i].insult<<endl;
 }
 
-/** @brief          Replaces the word in a string if it is an insult
+/** @brief          Replaces words that are insults
+ * 
+ *  @details        Compares words in the buffer with a predetermined 
+ *                  list of insults. 
  *    
- *  @param mystr    Array of strings that may contain insults
+ *  @param buff     Array of strings that may contain insults
  *
- *  @param insults  Array of struct s_insults
+ *  @param insults  Array of struct s_insults that contains the insults
  */
-void replaceInsults(string mystr[], s_insults insults[] ){
-	//cout<<"string size is "<<mystr[0].size()<<endl;
-	//string test="Alcoholic";
-	//int x=0;
+void replaceInsults(string buff[], int buffSize, s_insults insults[] ){
+	//Variables
+	string temp;	//Used to convert text in buff to lowercase
+	locale loc;
+	
+	//for loop for the buffer list size
+	for(int i=0; i<buffSize; i++){
 
-	//for loop for the insult list size
-	for(int i=0; i<SIZE; i++){
-		//for loop for the string size
-		for(int j=0; j<5; j++){
-			if( mystr[j].compare(insults[i].insult) == 0 )
-				mystr[j]="******";
+		//Converts text in buff to lowercase
+		temp = buff[i];
+		for (int k=0; k<temp.length(); k++)
+			temp[k] = tolower(temp[k],loc);
+
+		//for loop for the insult list size
+		for(int j=0; j<SIZE; j++){ 
+			if( temp.compare(insults[j].insult) == 0){
+				buff[i]="BLEEP";
+				break; //break to move on to the next word in the buffer
+			}
 		}//end inner forloop
 	}//end outer forloop
 }
