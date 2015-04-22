@@ -95,19 +95,20 @@ char* getDestination(char Buffer[1000]){
             fprintf(stderr, "chunK: %s\n", pci);
             //covers www.s and http://www.s
             if((placeholder = strstr(pci, "www.")) != NULL){
-                placeholder = placeholder + 4;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
+                //uncomment to filter out www. (not necessary)
+                //placeholder = placeholder + 4;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
                 memcpy(temp, placeholder, (strlen(placeholder)));
             }
             //covers just http://
             else if((placeholder = strstr(pci, "http://")) != NULL){
                 placeholder = placeholder + 7;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
                 memcpy(temp, placeholder, (strlen(placeholder)));
             }
       		else{
                 placeholder = pci + 1;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
                 memcpy(temp, placeholder, (strlen(placeholder)));
       			//memcpy(temp, &pci[1], (strlen(pci)-1));      			
       		}
@@ -135,10 +136,31 @@ char* getName(char Buffer[1000]){
     pci = strtok (pch, " ");
 
     while (pci != NULL){
-        char *temp = (char*)malloc(sizeof(char)*(strlen(pci)-1));
         if(pci[0] == '/'){
-            memcpy(temp, &pci[1], (strlen(pci)-1));
-            return temp;
+            char *temp;
+            char* placeholder;
+            //covers www.s and http://www.s
+            if((placeholder = strstr(pci, "www.")) != NULL){
+                if(strstr(pci, "http://") != NULL)
+                    placeholder = placeholder + 7;
+                //placeholder = placeholder + 4;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
+                memcpy(temp, placeholder, (strlen(placeholder)));
+                return temp;
+            }
+            //covers just http://
+            else if((placeholder = strstr(pci, "http://")) != NULL){
+                placeholder = placeholder + 7;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
+                memcpy(temp, placeholder, (strlen(placeholder)));
+                return temp;
+            }
+            else{
+                placeholder = pci + 1;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
+                memcpy(temp, placeholder, (strlen(placeholder)));
+                return temp;           
+            }
         }
         pci = strtok (NULL, " \n");
     }
@@ -232,7 +254,7 @@ void *client_handler(void *sock_desc){
 
             char *request;
             //generate request based on passed destination
-            if(strstr(getName(temp),".com"))
+            if(strstr(getName(temp),".com") || strstr(getName(temp),".edu") || strstr(getName(temp),".net") || strstr(getName(temp),".org"))
                 request = make_initial_request(destination);
             else{
                 fprintf(stderr,"NEW DESTINATION: %s\n", getName(temp));
@@ -311,8 +333,9 @@ char *handleResponse(int sock, int timeout, int localSock)
     //convert string back to c string
     char *response = (char*)malloc(sizeof(char)*responseCatch.length());
     strcpy(response, responseCatch.c_str());
-    fprintf(stderr, "%s\n", response);
-    
+    //fprintf(stderr, "%s\n", response);
+    fprintf(stderr, "Received %d bytes\n", totalBytes);
+
     //return converted response
     send(localSock, response, totalBytes, 0);
     return response;
