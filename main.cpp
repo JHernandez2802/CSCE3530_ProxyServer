@@ -2,6 +2,7 @@ using namespace std;
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <netdb.h> 
 #include <unistd.h>
@@ -17,6 +18,7 @@ char* getDestination(char Buffer[1000]);
 void *client_handler(void *sock_desc);
 char* make_initial_request(char* destination);
 char* make_successive_request(char* data);
+int getResponseSize(int sock, int timeout);
 char* handleResponse(int, int, int);
 char* getName(char Bufferr[1000]);
 
@@ -54,7 +56,7 @@ int main(){
 
     //mark the socket descriptor as passive, so that it can continually allow
     //accept() calls. set the backlog queue to 10.
-    listen(listenfd, 10);
+    listen(listenfd, 100);
 
 
     while(1){
@@ -69,7 +71,7 @@ int main(){
 	    sock_tmp = (int*)malloc(sizeof(int));
 	    *sock_tmp = connfd; 
 		threadCount++;
-		printf("Client %d connected. Creating new thread.\n", threadCount);
+		fprintf(stderr, "Client %d connected. Creating new thread.\n", threadCount);
 		status = pthread_create(&a_thread, NULL, client_handler, (void *)sock_tmp);
 	}
 
@@ -92,23 +94,27 @@ char* getDestination(char Buffer[1000]){
         if(pci[0] == '/'){
       		char *temp;
             char* placeholder;
-            fprintf(stderr, "chunK: %s\n", pci);
             //covers www.s and http://www.s
             if((placeholder = strstr(pci, "www.")) != NULL){
-                //uncomment to filter out www. (not necessary)
+                //comment to filter out www. (not necessary)
                 //placeholder = placeholder + 4;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
                 memcpy(temp, placeholder, (strlen(placeholder)));
             }
             //covers just http://
             else if((placeholder = strstr(pci, "http://")) != NULL){
                 placeholder = placeholder + 7;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
+                memcpy(temp, placeholder, (strlen(placeholder)));
+            }
+            else if((placeholder = strstr(pci, "https://")) != NULL){
+                placeholder = placeholder + 8;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
                 memcpy(temp, placeholder, (strlen(placeholder)));
             }
       		else{
                 placeholder = pci + 1;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
                 memcpy(temp, placeholder, (strlen(placeholder)));
       			//memcpy(temp, &pci[1], (strlen(pci)-1));      			
       		}
@@ -144,21 +150,27 @@ char* getName(char Buffer[1000]){
                 if(strstr(pci, "http://") != NULL)
                     placeholder = placeholder + 7;
                 //placeholder = placeholder + 4;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
-                memcpy(temp, placeholder, (strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                strncpy(temp, placeholder, (strlen(placeholder)));
                 return temp;
             }
             //covers just http://
             else if((placeholder = strstr(pci, "http://")) != NULL){
                 placeholder = placeholder + 7;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
-                memcpy(temp, placeholder, (strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                strncpy(temp, placeholder, (strlen(placeholder)));
+                return temp;
+            }
+            else if((placeholder = strstr(pci, "https://")) != NULL){
+                placeholder = placeholder + 8;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                strncpy(temp, placeholder, (strlen(placeholder)));
                 return temp;
             }
             else{
                 placeholder = pci + 1;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)-1));
-                memcpy(temp, placeholder, (strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                strncpy(temp, placeholder, (strlen(placeholder)));
                 return temp;           
             }
         }
@@ -193,7 +205,7 @@ int hostname_to_ip(char *name , char *ip){
 
 //make a request to the provided destination
 char* make_initial_request(char* destination){
-	char* request = (char*)malloc(sizeof(char)*100);
+	char* request = (char*)malloc(sizeof(char)*400);
 	sprintf(request, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", "/", destination);
     strcpy(curHost, destination);
     fprintf(stderr, "Changed current host to: %s\n", curHost);
@@ -210,7 +222,7 @@ char* make_successive_request(char* data){
 void *client_handler(void *sock_desc){
 	int sock = *(int*)sock_desc;
 	char temp[5000];
-	bzero(temp, 5000);
+	memset(temp, '\0', 5000);
 	int user = threadCount;
 
     //recv the local response
@@ -250,14 +262,14 @@ void *client_handler(void *sock_desc){
             {
                	fprintf(stderr, "Error: Connect Failed \n");
             }
-            printf("Client %d: Proxy connected to destination server.\n", user);
+            fprintf(stderr, "Client %d: Proxy connected to destination server.\n", user);
 
             char *request;
             //generate request based on passed destination
             if(strstr(getName(temp),".com") || strstr(getName(temp),".edu") || strstr(getName(temp),".net") || strstr(getName(temp),".org"))
                 request = make_initial_request(destination);
             else{
-                fprintf(stderr,"NEW DESTINATION: %s\n", getName(temp));
+                fprintf(stderr,"DATA REQUESTED: %s\n", getName(temp));
                 request = make_successive_request(getName(temp));
             }
             fprintf(stderr, "Client %d: Request:\n%s", user, request);
@@ -269,32 +281,25 @@ void *client_handler(void *sock_desc){
             //change socket settings so it is non-blocking
             fcntl(serverDesc, F_SETFL, O_NONBLOCK);
 
-            //handle response from the server
             char *response = handleResponse(serverDesc, 4, sock);
 
-            close(serverDesc);
-
-           	//send(sock, response, strlen(response), 0);
-       
+            close(serverDesc);       
     }
 
    	close(sock);
 
 }
 
-char *handleResponse(int sock, int timeout, int localSock)
-{
+int getResponseSize(int sock, int timeout){
     int bytesReceived = 0;
-    int totalBytes= 0;
+    int totalBytes = 0;
     struct timeval start, now;
     char recvChunk[1024];
     double difference; 
 
     //start time
     gettimeofday(&start , NULL);
-     
-    //string to accumulate chunks
-    string responseCatch = "";
+
     while(1){
         //get the current time
         gettimeofday(&now , NULL);
@@ -323,6 +328,59 @@ char *handleResponse(int sock, int timeout, int localSock)
             gettimeofday(&start , NULL);
             //add received bytes to total
             totalBytes += bytesReceived;
+            //stop when we receive last portion of html
+            if(strstr(recvChunk, "</html>"))
+                break;
+        }
+    }
+
+    //fprintf(stderr, "%s\n", response);
+    fprintf(stderr, "Received %d bytes\n", totalBytes);
+
+    return totalBytes;
+}
+
+char *handleResponse(int sock, int timeout, int localSock)
+{
+    int bytesReceived = 0;
+    int totalBytes= 0;
+    struct timeval start, now;
+    char recvChunk[1025];
+    double difference; 
+
+    //start time
+    gettimeofday(&start , NULL);
+     
+    //string to accumulate chunks
+    string responseCatch = "";
+    while(1){
+        //get the current time
+        gettimeofday(&now , NULL);
+        //now calculate the time elapsed in seconds
+        difference = (now.tv_sec - start.tv_sec) + 1e-6 * (now.tv_usec - start.tv_usec);
+        //if no data is received at all, and we have passed twice
+        //the timeout limit, we're done
+        if((timeout * 2) < difference){
+            break;
+        }
+        //if we have passed timeout limit, AND we have some bytes,
+        //then we pulled a chunk that was not 1024 bits, and are
+        //done receiving more
+        else if((difference > timeout) && (totalBytes > 0)){
+            break;
+        }
+        //reset the chunk variable
+        memset(recvChunk, '\0', 1025);
+        if((bytesReceived = recv(sock, recvChunk , 1024 , 0)) < 0){
+            //delay if nothing was received, just for 0.1 seconds
+            //in case more is on the way or being processed
+            usleep(100000);
+        }
+        else{
+            //reset start time
+            gettimeofday(&start , NULL);
+            //add received bytes to total
+            totalBytes += bytesReceived;
             responseCatch += recvChunk;
             //stop when we receive last portion of html
             if(strstr(recvChunk, "</html>"))
@@ -333,10 +391,15 @@ char *handleResponse(int sock, int timeout, int localSock)
     //convert string back to c string
     char *response = (char*)malloc(sizeof(char)*responseCatch.length());
     strcpy(response, responseCatch.c_str());
+    strcat(response, "\0");
     //fprintf(stderr, "%s\n", response);
-    fprintf(stderr, "Received %d bytes\n", totalBytes);
+    fprintf(stderr, "**Received %d bytes**\n", totalBytes);
 
     //return converted response
+
+    //change socket settings so it is non-blocking
+    fcntl(localSock, F_SETFL, O_NONBLOCK);
+
     send(localSock, response, totalBytes, 0);
     return response;
 }
