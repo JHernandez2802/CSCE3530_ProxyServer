@@ -11,6 +11,7 @@ using namespace std;
 #include <stdio.h>
 #include <fcntl.h> 
 #include <iostream>
+#include <sqlite3.h>
 
 //predicates
 int hostname_to_ip(char *name , char *ip);
@@ -21,9 +22,13 @@ char* make_successive_request(char* data);
 int getResponseSize(int sock, int timeout);
 char* handleResponse(int, int, int);
 char* getName(char Bufferr[1000]);
+static int getRecord(void *NotUsed, int argc, char **argv, char **azColName);
 
 char curHost[50] = "";
 int threadCount = 0;
+char IP[20] = "";
+char data2[100000] = "";
+bool newEntry = true;
 
 int main(){
 
@@ -224,7 +229,20 @@ void *client_handler(void *sock_desc){
 	char temp[5000];
 	memset(temp, '\0', 5000);
 	int user = threadCount;
-
+	
+	// Used for SQLite
+	sqlite3 *db;
+	char *zErrMsg = 0;
+	int rc;
+	char *sql, strSql[110000];
+	const char* data = "Callback function called";
+	
+	strcpy(IP, "\0");
+	strcpy(data2, "\0");
+	newEntry = true;
+	
+	rc = sqlite3_open("group3ProxyDB.db", &db);
+	
     //recv the local response
 	if(recv(sock, temp, 5000, 0) > 100){
         //turn destination name into ip address
@@ -237,7 +255,15 @@ void *client_handler(void *sock_desc){
         }
         //if(strlen(destination) > 1){
             fprintf(stderr, "Client %d: Destination is '%s'\n", user, destination);
-
+			
+			sprintf(strSql, "SELECT * FROM cache where IP='%s'", destination);
+			
+			sql = &strSql[0];
+			rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
+			
+			if (IP != "\0")
+				newEntry = false;
+			
            	//create and initialize server connection
         	struct sockaddr_in serverAddress;
         	memset(&serverAddress, '0', sizeof(serverAddress)); 
@@ -282,7 +308,19 @@ void *client_handler(void *sock_desc){
             fcntl(serverDesc, F_SETFL, O_NONBLOCK);
 
             char *response = handleResponse(serverDesc, 4, sock);
-
+			
+			if (newEntry)
+			{
+				strcpy(IP, destination);
+				strcpy(data2, response);
+			
+				sprintf(strSql, "INSERT INTO cache VALUES('%s','%s');", IP, data2);
+						
+				sql = &strSql[0];
+						
+				rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
+			}
+			sqlite3_close(db);
             close(serverDesc);       
     }
 
@@ -402,4 +440,12 @@ char *handleResponse(int sock, int timeout, int localSock)
 
     send(localSock, response, totalBytes, 0);
     return response;
+}
+
+static int getRecord(void *NotUsed, int argc, char **argv, char **azColName)
+{
+	strcpy(IP, argv[0]);
+	strcpy(data2, argv[1]);
+		
+	return 0;
 }
