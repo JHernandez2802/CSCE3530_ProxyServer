@@ -1,8 +1,14 @@
 # CSCE3530_ProxyServer
 Proxy Server built for UNT's CSCE 3530's Computer Network class
 
+Compile Database:
+g++ createProxyDB.cpp -l sqlite3 -o db
+
+Run Database:
+./db
+
 Compile:
-g++ -pthread main.cpp -o proxy
+g++ main.cpp -l sqlite3 -pthread -o proxy
 
 Run (shell):
 ./proxy
