@@ -1,4 +1,12 @@
+//file main.cpp
+
 using namespace std;
+
+#include <fstream>
+#include <locale>
+#include <iostream>
+#include <sstream>
+#include <string>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
@@ -12,17 +20,29 @@ using namespace std;
 #include <fcntl.h> 
 #include <iostream>
 #include <sqlite3.h>
+#include <assert.h>
+
+#define SIZE 246
+
+struct s_insults{
+	string insult;
+	int pos;
+	int strSize;
+} insults[SIZE];
 
 //predicates
-int hostname_to_ip(char *name , char *ip);
 char* getDestination(char Buffer[1000]);
-void *client_handler(void *sock_desc);
+char* getName(char Bufferr[1000]);
+int hostname_to_ip(char *name , char *ip);
 char* make_initial_request(char* destination);
 char* make_successive_request(char* data);
+void *client_handler(void *sock_desc);
 int getResponseSize(int sock, int timeout);
 char* handleResponse(int, int, int);
 char* getName(char Bufferr[1000]);
 static int getRecord(void *NotUsed, int argc, char **argv, char **azColName);
+void addInsults(s_insults insults[]);
+string replaceInsults(string data, s_insults insults[] );
 
 char curHost[50] = "";
 int threadCount = 0;
@@ -30,7 +50,12 @@ char IP[20] = "";
 char data2[100000] = "";
 bool newEntry = true;
 
+
 int main(){
+	
+	//Add the insults from the text file to 
+	//the array of structs
+	addInsults(insults);
 
 	//create and initialize socket address structrure
     struct sockaddr_in socketAddress;
@@ -237,6 +262,7 @@ void *client_handler(void *sock_desc){
 	char *sql, strSql[110000];
 	const char* data = "Callback function called";
 	
+	// resets data
 	strcpy(IP, "\0");
 	strcpy(data2, "\0");
 	newEntry = true;
@@ -256,11 +282,13 @@ void *client_handler(void *sock_desc){
         //if(strlen(destination) > 1){
             fprintf(stderr, "Client %d: Destination is '%s'\n", user, destination);
 			
+			// Checks if the IP is already in the DB
 			sprintf(strSql, "SELECT * FROM cache where IP='%s'", destination);
 			
 			sql = &strSql[0];
 			rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
 			
+			// Flags newEntry that the IP is already in the DB
 			if (IP != "\0")
 				newEntry = false;
 			
@@ -307,10 +335,13 @@ void *client_handler(void *sock_desc){
             //change socket settings so it is non-blocking
             fcntl(serverDesc, F_SETFL, O_NONBLOCK);
 
+			//Filter goes here
+			
             char *response = handleResponse(serverDesc, 4, sock);
 			
+			// Checks if the IP accessed it new or not
 			if (newEntry)
-			{
+			{// Saves IP and response to DB if it is new
 				strcpy(IP, destination);
 				strcpy(data2, response);
 			
@@ -426,6 +457,9 @@ char *handleResponse(int sock, int timeout, int localSock)
         }
     }
 
+	//filters insults out of string
+	responseCatch=replaceInsults(responseCatch, insults);
+	
     //convert string back to c string
     char *response = (char*)malloc(sizeof(char)*responseCatch.length());
     strcpy(response, responseCatch.c_str());
@@ -442,10 +476,78 @@ char *handleResponse(int sock, int timeout, int localSock)
     return response;
 }
 
+// Gets record from database
 static int getRecord(void *NotUsed, int argc, char **argv, char **azColName)
 {
 	strcpy(IP, argv[0]);
 	strcpy(data2, argv[1]);
 		
 	return 0;
+}
+
+/** @brief          Adds insults to struct array
+ *
+ *  @details        Grabs the insults from "insults.txt" and adds
+ *                  them to the insults struct array
+ *  @param insults  Array of struct s_insults
+ */
+void addInsults(s_insults insults[]){
+	//Variables
+	int x=0;
+	string data;
+	ifstream fin;
+
+	//Opens file
+    fin.open("insults.txt",ios::in);
+    assert (!fin.fail( ));    
+
+	//Reads from the file until the end of file
+    while ( !fin.eof( ) ){
+		getline(fin,data);
+        insults[x].insult = data;
+		insults[x].pos = 0;
+		insults[x].strSize = data.length();
+		x++;
+     }
+	//Close the file
+     fin.close( );
+     assert(!fin.fail( ));
+}
+
+/** @brief          Replaces words that are insults
+ * 
+ *  @details        Compares words in the buffer with a predetermined 
+ *                  list of insults. 
+ *    
+ *  @param data     String of data that may contain insults
+ *
+ *  @param insults  Array of struct s_insults that contains the insults
+ */
+string replaceInsults(string data, s_insults insults[] ){
+ 	//Variables
+	string temp, buffer, newData;	//Used to convert text in buff to lowercase
+	locale loc;
+	
+	istringstream stream(data);
+
+	while(stream>>buffer){
+		//converts buffer to lower case to test for insults
+		temp = buffer;
+		for(int k=0; k<temp.length(); k++)
+			temp[k] = tolower(temp[k],loc);
+		temp = temp + "\r";
+		
+		for(int j=0; j<SIZE; j++){ 
+			//Moves to next word if the two strings are of different length
+			if(insults[j].strSize !=  temp.length() && (j+1) != SIZE )
+				j++;
+			if( temp.compare(insults[j].insult) == 0){
+				buffer="*****";
+				break;
+			}
+		}
+		newData+=" "+buffer;
+	}
+	cout<<"New data is "<<newData<<endl;
+	return newData;
 }
