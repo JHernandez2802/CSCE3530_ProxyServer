@@ -122,30 +122,38 @@ char* getDestination(char Buffer[1000]){
     while (pci != NULL){
         //chunk with '/' as first character holds address
         if(pci[0] == '/'){
-      		char *temp;
+      		char *temp = NULL;
             char* placeholder;
             //covers www.s and http://www.s
             if((placeholder = strstr(pci, "www.")) != NULL){
                 //comment to filter out www. (not necessary)
                 //placeholder = placeholder + 4;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder))+1);
                 memcpy(temp, placeholder, (strlen(placeholder)));
+                int pos = strlen(placeholder);
+                temp[pos] = '\0';
             }
             //covers just http://
             else if((placeholder = strstr(pci, "http://")) != NULL){
                 placeholder = placeholder + 7;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder))+1);
                 memcpy(temp, placeholder, (strlen(placeholder)));
+                int pos = strlen(placeholder);
+                temp[pos] = '\0';
             }
             else if((placeholder = strstr(pci, "https://")) != NULL){
                 placeholder = placeholder + 8;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder))+1);
                 memcpy(temp, placeholder, (strlen(placeholder)));
+                int pos = strlen(placeholder);
+                temp[pos] = '\0';
             }
       		else{
                 placeholder = pci + 1;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder))+1);
                 memcpy(temp, placeholder, (strlen(placeholder)));
+                int pos = strlen(placeholder);
+                temp[pos] = '\0';
       			//memcpy(temp, &pci[1], (strlen(pci)-1));      			
       		}
             char *ip = (char*)malloc(sizeof(char)*100);
@@ -337,8 +345,11 @@ void *client_handler(void *sock_desc){
 
 			//Filter goes here
 			
-            char *response = handleResponse(serverDesc, 4, sock);
+            char *response = handleResponse(serverDesc, 3, sock);
 			
+            close(serverDesc);
+            fflush(stderr);  
+
 			// Checks if the IP accessed it new or not
 			if (newEntry)
 			{// Saves IP and response to DB if it is new
@@ -351,11 +362,11 @@ void *client_handler(void *sock_desc){
 						
 				rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
 			}
-			sqlite3_close(db);
-            close(serverDesc);       
+			sqlite3_close(db);     
     }
 
    	close(sock);
+    fflush(stderr);
 
 }
 
@@ -363,7 +374,7 @@ int getResponseSize(int sock, int timeout){
     int bytesReceived = 0;
     int totalBytes = 0;
     struct timeval start, now;
-    char recvChunk[1024];
+    char recvChunk[513];
     double difference; 
 
     //start time
@@ -380,14 +391,14 @@ int getResponseSize(int sock, int timeout){
             break;
         }
         //if we have passed timeout limit, AND we have some bytes,
-        //then we pulled a chunk that was not 1024 bits, and are
+        //then we pulled a chunk that was not 512 bits, and are
         //done receiving more
         else if((difference > timeout) && (totalBytes > 0)){
             break;
         }
         //reset the chunk variable
-        memset(recvChunk, 0 , 1024);
-        if((bytesReceived = recv(sock, recvChunk , 1024 , 0)) < 0){
+        memset(recvChunk, 0 , 513);
+        if((bytesReceived = recv(sock, recvChunk , 512 , 0)) < 0){
             //delay if nothing was received, just for 0.1 seconds
             //in case more is on the way or being processed
             usleep(100000);
@@ -398,8 +409,8 @@ int getResponseSize(int sock, int timeout){
             //add received bytes to total
             totalBytes += bytesReceived;
             //stop when we receive last portion of html
-            if(strstr(recvChunk, "</html>"))
-                break;
+            /*if(strstr(recvChunk, "</html>"))
+                break;*/
         }
     }
 
@@ -414,7 +425,7 @@ char *handleResponse(int sock, int timeout, int localSock)
     int bytesReceived = 0;
     int totalBytes= 0;
     struct timeval start, now;
-    char recvChunk[1025];
+    char recvChunk[512];
     double difference; 
 
     //start time
@@ -439,8 +450,8 @@ char *handleResponse(int sock, int timeout, int localSock)
             break;
         }
         //reset the chunk variable
-        memset(recvChunk, '\0', 1025);
-        if((bytesReceived = recv(sock, recvChunk , 1024 , 0)) < 0){
+        memset(recvChunk, '\0', 512);
+        if((bytesReceived = recv(sock, recvChunk , 512 , 0)) < 0){
             //delay if nothing was received, just for 0.1 seconds
             //in case more is on the way or being processed
             usleep(100000);
@@ -452,13 +463,13 @@ char *handleResponse(int sock, int timeout, int localSock)
             totalBytes += bytesReceived;
             responseCatch += recvChunk;
             //stop when we receive last portion of html
-            if(strstr(recvChunk, "</html>"))
-                break;
+            //if(strstr(recvChunk, "</html>"))
+                //break;
         }
     }
 
 	//filters insults out of string
-	responseCatch=replaceInsults(responseCatch, insults);
+	//responseCatch=replaceInsults(responseCatch, insults);
 	
     //convert string back to c string
     char *response = (char*)malloc(sizeof(char)*responseCatch.length());
