@@ -43,13 +43,15 @@ char* getName(char Bufferr[1000]);
 static int getRecord(void *NotUsed, int argc, char **argv, char **azColName);
 void addInsults(s_insults insults[]);
 string replaceInsults(string data, s_insults insults[] );
+int addBlacklist(char strArr[50][50], int total);
 
 char curHost[50] = "";
 int threadCount = 0;
 char IP[20] = "";
 char data2[100000] = "";
 bool newEntry = true;
-
+bool blacklisted = false;
+char blacklist[50][50];
 
 int main(){
 	
@@ -269,13 +271,16 @@ void *client_handler(void *sock_desc){
 	int rc;
 	char *sql, strSql[110000];
 	const char* data = "Callback function called";
+	int blacklistTotal = 0;
 	
 	// resets data
 	strcpy(IP, "\0");
 	strcpy(data2, "\0");
 	newEntry = true;
+	blacklisted = false;
 	
 	rc = sqlite3_open("group3ProxyDB.db", &db);
+	blacklistTotal = addBlacklist(blacklist, blacklistTotal);
 	
     //recv the local response
 	if(recv(sock, temp, 5000, 0) > 100){
@@ -289,6 +294,14 @@ void *client_handler(void *sock_desc){
         }
         //if(strlen(destination) > 1){
             fprintf(stderr, "Client %d: Destination is '%s'\n", user, destination);
+			// Checks blacklist
+			for(int i = 0; i < blacklistTotal; i++)
+			{
+				if (blacklist[i] == destination)
+				{
+					blacklisted = true;
+				}
+			}
 			
 			// Checks if the IP is already in the DB
 			sprintf(strSql, "SELECT * FROM cache where IP='%s'", destination);
@@ -561,4 +574,28 @@ string replaceInsults(string data, s_insults insults[] ){
 	}
 	cout<<"New data is "<<newData<<endl;
 	return newData;
+}
+
+// Adds IP's from blacklist.txt
+int addBlacklist(char strArr[50][50], int total){
+	//Variables
+	int x=0;
+	string data;
+	ifstream fin;
+
+	//Opens file
+    fin.open("blacklist.txt",ios::in);
+    assert (!fin.fail( ));    
+
+	//Reads from the file until the end of file
+    while ( !fin.eof( ) ){
+		getline(fin,data);
+        strcpy(strArr[x], data.c_str());
+		total++;
+		x++;
+     }
+	//Close the file
+     fin.close( );
+     assert(!fin.fail( ));
+	 return total;
 }
