@@ -184,6 +184,7 @@ char* getDestination(char Buffer[1000]){
   	}
 }
 
+//get the name of the destination (not ip) from request
 char* getName(char Buffer[1000]){
     char tempBuff[1000];
     strcpy(tempBuff, Buffer);
