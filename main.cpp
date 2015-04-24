@@ -465,9 +465,6 @@ char *handleResponse(int sock, int timeout, int localSock){
     //change total number of bytes received
     fprintf(stderr, "**Received %d bytes**\n", totalBytes);
 
-    //change socket settings so it is non-blocking
-    fcntl(localSock, F_SETFL, O_NONBLOCK);
-
     send(localSock, response, totalBytes, 0);
     return response;
 }
