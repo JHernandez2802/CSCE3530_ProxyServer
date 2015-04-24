@@ -20,6 +20,7 @@ struct s_insults{
 void addInsults(s_insults insults[]);
 void printInsults(s_insults insults[]);
 string replaceInsults(string data, s_insults insults[] );
+bool checkInsults (string data, s_insults[]);
 
 int main(){
 	string data;
@@ -66,9 +67,10 @@ void addInsults(s_insults insults[]){
 	//Reads from the file until the end of file
     while ( !fin.eof( ) ){
 		getline(fin,data);
-        insults[x].insult = data;
+		for(int i=0;i<data.length()-1;i++)
+			insults[x].insult += data[i];
 		insults[x].pos = 0;
-		insults[x].strSize = data.length();
+		insults[x].strSize = data.length() -1;
 		x++;
      }
 	//Close the file
@@ -97,50 +99,64 @@ void printInsults(s_insults insults[]){
  */
 string replaceInsults(string data, s_insults insults[] ){
  	//Variables
-	string temp, buffer, newData;	//Used to convert text in buff to lowercase
+	string goodStr, compareStr, newData;
 	locale loc;
-	
-	istringstream stream(data);
+	int counter=0;
 
-	while(stream>>buffer){
-		//converts buffer to lower case to test for insults
-		temp = buffer;
-		for(int k=0; k<temp.length(); k++)
-			temp[k] = tolower(temp[k],loc);
-		temp = temp + "\r";
-		
-		for(int j=0; j<SIZE; j++){ 
-			//Moves to next word if the two strings are of different length
-			if(insults[j].strSize !=  temp.length() && (j+1) != SIZE )
-				j++;
-			if( temp.compare(insults[j].insult) == 0){
-				buffer="*****";
-				break;
+	for(int i=0; i<data.length(); i++){
+		//Checks to see if character is not a new line 
+		//character or white-space
+		if(data[i]!=' ' || data[i]!='\0' 
+		|| data[i]!='\r'|| data[i]!='\n'){
+			//Creates compareStr string character by character
+			//and makes them lower-case to prevent filter bypass
+			compareStr+=data[i];
+			goodStr+=data[i];
+			compareStr[counter] = tolower(compareStr[counter],loc);
+			counter++;
+			//Looks ahead for new line characters and
+			//white-spaces to know that a word is complete
+ 			if(data[i+1]==' ' || data[i+1]=='\0' 
+			|| data[i+1]=='\r'|| data[i+1]=='\n'){
+				//Runs if a word has been completed
+				if(checkInsults(compareStr,insults)){
+					//Replaces word and resets strings and counter
+					compareStr="*****";
+					newData+=compareStr;
+					compareStr.clear();
+					goodStr.clear();
+					counter=0;
+				}
+				else{
+					//Adds word to return string and resets strings and counter
+					newData+=goodStr;
+					compareStr.clear();
+					goodStr.clear();
+					counter=0;
+				}
 			}
 		}
-		newData+=" "+buffer;
+		//Adds white-spaces and new lines to return string
+		if(data[i]==' ' || data[i]=='\0' 
+		|| data[i]=='\r'|| data[i]=='\n'){
+			newData+=data[i];
+		}
 	}
-	cout<<"New data is "<<newData<<endl;
 	return newData;
-
-/* 	for(int i=0; i<data.length(); i++){
-
-		//Converts data to lowercase
-		temp = data[i];
-		for(int k=0; k<temp.length(); k++)
-			temp[i] = tolower(temp[i],loc);
-		temp = temp + "\r";
-		//for loop for the insult list size
-		for(int j=0; j<SIZE; j++){ 
-			//Moves to next word if the two strings are of different length
-			if(insults[j].strSize !=  temp.length() && (j+1) != SIZE )
-				j++;
-			if( temp.compare(insults[j].insult) == 0){
-				data="*****";
-				break; //break to move on to the next word in the buffer
-			}
-			
-		}//end inner forloop
-	}//end while  */
 }
 
+bool checkInsults(string data, s_insults insults[]){
+	cout<<"Word to be compared is "<<data<<endl;
+	cout<<"Length of word is "<<data.length()<<endl;
+	 for(int j=0; j<SIZE; j++){ 
+		//Moves to next word if the two strings are of different length
+		if(insults[j].strSize !=  data.length() && (j+1) != SIZE )
+			j++;
+		//Compares the two words and returns true if they match
+		if( data.compare(insults[j].insult) == 0){
+			return true;
+		}
+	}
+	//If no insult has been found return false
+	return false;
+}
