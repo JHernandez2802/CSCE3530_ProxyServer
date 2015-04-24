@@ -300,6 +300,7 @@ void *client_handler(void *sock_desc){
 				if (blacklist[i] == destination)
 				{
 					blacklisted = true;
+					break;
 				}
 			}
 			
