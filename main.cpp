@@ -37,7 +37,6 @@ int hostname_to_ip(char *name , char *ip);
 char* make_initial_request(char* destination);
 char* make_successive_request(char* data);
 void *client_handler(void *args);
-int getResponseSize(int sock, int timeout);
 char* handleResponse(int, int, int);
 char* getName(char Bufferr[1000]);
 static int getRecord(void *NotUsed, int argc, char **argv, char **azColName);
@@ -61,7 +60,6 @@ struct Arguments {
 };
 
 int main(){
-	
 	//Add the insults from the text file to 
 	//the array of structs
 	addInsults(insults);
@@ -117,14 +115,15 @@ int main(){
         inet_ntop(AF_INET, &clientAddress.sin_addr.s_addr, ip, INET_ADDRSTRLEN);
         strcpy(args.ip, ip);
         args.sock = connfd;
-
+        //print to log
 		fprintf(stderr, "Client %d connected (%s). Creating new thread.\n", threadCount, ip);
+        //spawn new thread
 		status = pthread_create(&a_thread, NULL, client_handler, (void *)&args);
 	}
-
 	return 0;
 }
 
+//get the destination from a request packet
 char* getDestination(char Buffer[1000]){
 	char tempBuff[1000];
 	strcpy(tempBuff, Buffer);
@@ -276,11 +275,9 @@ char* make_successive_request(char* data){
 //handler for each thread
 void *client_handler(void *args){
 
-
+    //make variable to hold arguments received at thread creation
     struct Arguments *arguments = (Arguments*)args;
-
     int sock = arguments->sock;
-	//int sock = *(int*)sock_desc;
 	char temp[5000];
 	memset(temp, '\0', 5000);
 	int user = threadCount;
@@ -298,164 +295,124 @@ void *client_handler(void *args){
 	strcpy(data2, "\0");
 	newEntry = true;
 	blacklisted = false;
-	
+
+	//db setup and blacklist init
 	rc = sqlite3_open("group3ProxyDB.db", &db);
 	blacklistTotal = addBlacklist(blacklist, blacklistTotal);
 	
     //recv the local response
 	if(recv(sock, temp, 5000, 0) > 100){
+
         //turn destination name into ip address
     	char *destination = getDestination(temp);
-        //exit(EXIT_FAILURE);
         //add a check to cancel out multiple requests with no destination
         if(destination == NULL){
             destination = (char*)malloc(sizeof(char)*strlen(curHost));
             strcpy(destination, curHost);
         }
-        //if(strlen(destination) > 1){
-            fprintf(stderr, "Client %d: Destination is '%s', Source was '%s'\n", user, destination, arguments->ip);
-			// Checks blacklist
-			for(int i = 0; i < blacklistTotal; i++)
-			{
-				if (blacklist[i] == destination)
-				{
-					blacklisted = true;
-					break;
-				}
+        fprintf(stderr, "Client %d: Destination is '%s', Source was '%s'\n", user, destination, arguments->ip);
+		
+    	// Checks blacklist
+		for(int i = 0; i < blacklistTotal; i++){
+            //site was found on blacklist
+			if (strcmp(blacklist[i],destination) == 0){
+				blacklisted = true;
+                fprintf(stderr, "Destination, %s, is blacklisted, exiting thread.\n", destination);
+                char* response = (char*)malloc(sizeof(char)*400);
+                sprintf(response, "HTTP/1.1 200 OK\r\n\r\n<!DOCTYPE html><body>Sorry, the site you tried to access is blocked.</body></html>");
+                send(sock, response, strlen(response), 0);
+                close(sock);
+                pthread_exit(0);
+				break;
 			}
-			
-			// Checks if the IP is already in the DB
-			sprintf(strSql, "SELECT * FROM cache where IP='%s'", destination);
-			
+		}
+		
+        fprintf(stderr, "made is past blacklist\n");
+
+		// Checks if the IP is already in the cache DB
+		sprintf(strSql, "SELECT * FROM cache where IP='%s'", destination);
+		sql = &strSql[0];
+		rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
+		// Flags newEntry that the IP is already in the DB
+		if (IP != "\0")
+			newEntry = false;
+
+       	//create and initialize server connection
+    	struct sockaddr_in serverAddress;
+    	memset(&serverAddress, '0', sizeof(serverAddress)); 
+    	int serverDesc = 0;
+    	//create socket based on basic and ambigious parameters
+    	if((serverDesc = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+            fprintf(stderr, "Error: Could not create socket \n");
+        } 
+        //set socket address attributes
+        //tests to make sure second user string is an ip address
+        if(inet_pton(AF_INET, destination, &serverAddress.sin_addr)<=0)
+        {
+            fprintf(stderr, "Please pass an ip address.\n");
+            //exit(EXIT_FAILURE);
+        }  
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_port = htons(80);
+        //attempt connection with assigned socket
+        if(connect(serverDesc,(struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0)
+        {
+           	fprintf(stderr, "Error: Connect Failed \n");
+        }
+        fprintf(stderr, "Client %d: Proxy connected to destination server.\n", user);
+
+        
+        //generate request based on passed destination
+        char *request;
+        if(strstr(getName(temp),".com") || strstr(getName(temp),".edu") || strstr(getName(temp),".net") || strstr(getName(temp),".org"))
+            request = make_initial_request(destination);
+        else{
+            fprintf(stderr,"DATA REQUESTED: %s\n", getName(temp));
+            request = make_successive_request(getName(temp));
+        }
+        fprintf(stderr, "Client %d: Request:\n%s", user, request);
+
+        //send request to socket
+        if(send(serverDesc,request,strlen(request),0) < 0)
+            fprintf(stderr, "Error sending request.\n");
+
+        //change socket settings so it is non-blocking
+        fcntl(serverDesc, F_SETFL, O_NONBLOCK);
+
+        //receive and handle response from destination		
+        char *response = handleResponse(serverDesc, 3, sock);
+		
+        //close the stream to the destination server and flush stderr
+        close(serverDesc);
+        fflush(stderr);  
+
+		// Checks if the IP accessed it new or not
+		if (newEntry)
+		{// Saves IP and response to DB if it is new
+			strcpy(IP, destination);
+			strcpy(data2, response);
+			sprintf(strSql, "INSERT INTO cache VALUES('%s','%s');", IP, data2);
+					
 			sql = &strSql[0];
+					
 			rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
-			
-			// Flags newEntry that the IP is already in the DB
-			if (IP != "\0")
-				newEntry = false;
-			
-           	//create and initialize server connection
-        	struct sockaddr_in serverAddress;
-        	memset(&serverAddress, '0', sizeof(serverAddress)); 
-
-        	int serverDesc = 0;
-
-        	//create socket based on basic and ambigious parameters
-        	if((serverDesc = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-                fprintf(stderr, "Error: Could not create socket \n");
-            } 
-            //set socket address attributes
-            //tests to make sure second user string is an ip address
-            if(inet_pton(AF_INET, destination, &serverAddress.sin_addr)<=0)
-            {
-                fprintf(stderr, "Please pass an ip address.\n");
-                //exit(EXIT_FAILURE);
-            }  
-            serverAddress.sin_family = AF_INET;
-            serverAddress.sin_port = htons(80);
-            //attempt connection with assigned socket
-            if(connect(serverDesc,(struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0)
-            {
-               	fprintf(stderr, "Error: Connect Failed \n");
-            }
-            fprintf(stderr, "Client %d: Proxy connected to destination server.\n", user);
-
-            char *request;
-            //generate request based on passed destination
-            if(strstr(getName(temp),".com") || strstr(getName(temp),".edu") || strstr(getName(temp),".net") || strstr(getName(temp),".org"))
-                request = make_initial_request(destination);
-            else{
-                fprintf(stderr,"DATA REQUESTED: %s\n", getName(temp));
-                request = make_successive_request(getName(temp));
-            }
-            fprintf(stderr, "Client %d: Request:\n%s", user, request);
-
-            //send request to socket
-            if(send(serverDesc,request,strlen(request),0) < 0)
-                fprintf(stderr, "Error sending request.\n");
-
-            //change socket settings so it is non-blocking
-            fcntl(serverDesc, F_SETFL, O_NONBLOCK);
-
-			//Filter goes here
-			
-            char *response = handleResponse(serverDesc, 3, sock);
-			
-            close(serverDesc);
-            fflush(stderr);  
-
-			// Checks if the IP accessed it new or not
-			if (newEntry)
-			{// Saves IP and response to DB if it is new
-				strcpy(IP, destination);
-				strcpy(data2, response);
-			
-				sprintf(strSql, "INSERT INTO cache VALUES('%s','%s');", IP, data2);
-						
-				sql = &strSql[0];
-						
-				rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
-			}
-			sqlite3_close(db);     
+		}
+        //entry is already saved in cache and stored in data2 variable
+        else{
+            fprintf(stderr, "%s was found in the cache.\n", destination);
+            //send cached data to local server
+        }
+		sqlite3_close(db);     
     }
 
+    //close up stream to local system and free up other assets
    	close(sock);
     fflush(stderr);
     pthread_exit(0);
-
-}
-
-int getResponseSize(int sock, int timeout){
-    int bytesReceived = 0;
-    int totalBytes = 0;
-    struct timeval start, now;
-    char recvChunk[512];
-    double difference; 
-
-    //start time
-    gettimeofday(&start , NULL);
-
-    while(1){
-        //get the current time
-        gettimeofday(&now , NULL);
-        //now calculate the time elapsed in seconds
-        difference = (now.tv_sec - start.tv_sec) + 1e-6 * (now.tv_usec - start.tv_usec);
-        //if no data is received at all, and we have passed twice
-        //the timeout limit, we're done
-        if((timeout * 2) < difference){
-            break;
-        }
-        //if we have passed timeout limit, AND we have some bytes,
-        //then we pulled a chunk that was not 512 bits, and are
-        //done receiving more
-        else if((difference > timeout) && (totalBytes > 0)){
-            break;
-        }
-        //reset the chunk variable
-        memset(recvChunk, 0 , 512);
-        if((bytesReceived = recv(sock, recvChunk , 512 , 0)) < 0){
-            //delay if nothing was received, just for 0.1 seconds
-            //in case more is on the way or being processed
-            usleep(100000);
-        }
-        else{
-            //reset start time
-            gettimeofday(&start , NULL);
-            //add received bytes to total
-            totalBytes += bytesReceived;
-            //stop when we receive last portion of html
-            /*if(strstr(recvChunk, "</html>"))
-                break;*/
-        }
-    }
-
-    //fprintf(stderr, "%s\n", response);
-    fprintf(stderr, "Received %d bytes\n", totalBytes);
-
-    return totalBytes;
 }
 
 char *handleResponse(int sock, int timeout, int localSock){
+    //init variables
     int bytesReceived = 0;
     int totalBytes= 0;
     struct timeval start, now;
@@ -500,9 +457,6 @@ char *handleResponse(int sock, int timeout, int localSock){
                     responseCatch = recvChunk;
             else
                 responseCatch += recvChunk;
-            //stop when we receive last portion of html
-            //if(strstr(recvChunk, "</html>"))
-                //break;
         }
     }
 
@@ -513,10 +467,9 @@ char *handleResponse(int sock, int timeout, int localSock){
     char *response = (char*)malloc(sizeof(char)*responseCatch.length());
     strcpy(response, responseCatch.c_str());
     strcat(response, "\0");
-    //fprintf(stderr, "%s\n", response);
-    fprintf(stderr, "**Received %d bytes**\n", totalBytes);
 
-    //return converted response
+    //print total number of bytes received
+    fprintf(stderr, "**Received %d bytes**\n", totalBytes);
 
     //change socket settings so it is non-blocking
     fcntl(localSock, F_SETFL, O_NONBLOCK);
