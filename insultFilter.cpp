@@ -99,12 +99,12 @@ void printInsults(s_insults insults[]){
  */
 string replaceInsults(string data, s_insults insults[] ){
  	//Variables
-	string goodStr, compareStr, newData;
+	string goodStr, compareStr, newData, blank;
 	locale loc;
 	int counter=0;
 
 	for(int i=0; i<data.length(); i++){
-		//Checks to see if character is not a new line 
+		//Checks to see if character is NOT a new line 
 		//character or white-space
 		if(data[i]!=' ' || data[i]!='\0' 
 		|| data[i]!='\r'|| data[i]!='\n'){
@@ -136,18 +136,34 @@ string replaceInsults(string data, s_insults insults[] ){
 				}
 			}
 		}
-		//Adds white-spaces and new lines to return string
+		//Checks to see if character IS a new line 
+		//character or white-space
 		if(data[i]==' ' || data[i]=='\0' 
 		|| data[i]=='\r'|| data[i]=='\n'){
+			//Adds white-spaces and new lines to return string
+			//and resets strings and counters
 			newData+=data[i];
+			compareStr.clear();
+			goodStr.clear();
+			counter=0;
 		}
 	}
 	return newData;
 }
 
+/** @brief          Compares word against insults list
+ * 
+ *  @details        Compares words in the buffer with a predetermined 
+ *                  list of insults. 
+ *    
+ *  @param data     String to be compared against insults list
+ *
+ *  @param insults  Array of struct s_insults that contains the insults
+ * 
+ *  @return         Returns boolean value TRUE if an insult is matched
+ *                  and a boolean value of FALSE if no insult is matched
+ */
 bool checkInsults(string data, s_insults insults[]){
-	cout<<"Word to be compared is "<<data<<endl;
-	cout<<"Length of word is "<<data.length()<<endl;
 	 for(int j=0; j<SIZE; j++){ 
 		//Moves to next word if the two strings are of different length
 		if(insults[j].strSize !=  data.length() && (j+1) != SIZE )
