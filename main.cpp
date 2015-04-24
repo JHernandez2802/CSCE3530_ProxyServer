@@ -36,7 +36,7 @@ char* getName(char Bufferr[1000]);
 int hostname_to_ip(char *name , char *ip);
 char* make_initial_request(char* destination);
 char* make_successive_request(char* data);
-void *client_handler(void *sock_desc);
+void *client_handler(void *args);
 int getResponseSize(int sock, int timeout);
 char* handleResponse(int, int, int);
 char* getName(char Bufferr[1000]);
@@ -54,6 +54,11 @@ char data2[100000] = "";
 bool newEntry = true;
 bool blacklisted = false;
 char blacklist[50][50];
+
+struct Arguments {
+    char ip[INET_ADDRSTRLEN];
+    int sock;
+};
 
 int main(){
 	
@@ -105,8 +110,16 @@ int main(){
 	    sock_tmp = (int*)malloc(sizeof(int));
 	    *sock_tmp = connfd; 
 		threadCount++;
-		fprintf(stderr, "Client %d connected. Creating new thread.\n", threadCount);
-		status = pthread_create(&a_thread, NULL, client_handler, (void *)sock_tmp);
+
+        //set up a structure to transfer data to thread
+        struct Arguments args;
+        char ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &clientAddress.sin_addr.s_addr, ip, INET_ADDRSTRLEN);
+        strcpy(args.ip, ip);
+        args.sock = connfd;
+
+		fprintf(stderr, "Client %d connected (%s). Creating new thread.\n", threadCount, ip);
+		status = pthread_create(&a_thread, NULL, client_handler, (void *)&args);
 	}
 
 	return 0;
@@ -192,26 +205,26 @@ char* getName(char Buffer[1000]){
                 if(strstr(pci, "http://") != NULL)
                     placeholder = placeholder + 7;
                 //placeholder = placeholder + 4;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
                 strncpy(temp, placeholder, (strlen(placeholder)));
                 return temp;
             }
             //covers just http://
             else if((placeholder = strstr(pci, "http://")) != NULL){
                 placeholder = placeholder + 7;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
                 strncpy(temp, placeholder, (strlen(placeholder)));
                 return temp;
             }
             else if((placeholder = strstr(pci, "https://")) != NULL){
                 placeholder = placeholder + 8;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
                 strncpy(temp, placeholder, (strlen(placeholder)));
                 return temp;
             }
             else{
                 placeholder = pci + 1;
-                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)));
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder)+1));
                 strncpy(temp, placeholder, (strlen(placeholder)));
                 return temp;           
             }
@@ -261,8 +274,13 @@ char* make_successive_request(char* data){
 }
 
 //handler for each thread
-void *client_handler(void *sock_desc){
-	int sock = *(int*)sock_desc;
+void *client_handler(void *args){
+
+
+    struct Arguments *arguments = (Arguments*)args;
+
+    int sock = arguments->sock;
+	//int sock = *(int*)sock_desc;
 	char temp[5000];
 	memset(temp, '\0', 5000);
 	int user = threadCount;
@@ -295,7 +313,7 @@ void *client_handler(void *sock_desc){
             strcpy(destination, curHost);
         }
         //if(strlen(destination) > 1){
-            fprintf(stderr, "Client %d: Destination is '%s'\n", user, destination);
+            fprintf(stderr, "Client %d: Destination is '%s', Source was '%s'\n", user, destination, arguments->ip);
 			// Checks blacklist
 			for(int i = 0; i < blacklistTotal; i++)
 			{
@@ -383,6 +401,7 @@ void *client_handler(void *sock_desc){
 
    	close(sock);
     fflush(stderr);
+    pthread_exit(0);
 
 }
 
@@ -390,7 +409,7 @@ int getResponseSize(int sock, int timeout){
     int bytesReceived = 0;
     int totalBytes = 0;
     struct timeval start, now;
-    char recvChunk[513];
+    char recvChunk[512];
     double difference; 
 
     //start time
@@ -413,7 +432,7 @@ int getResponseSize(int sock, int timeout){
             break;
         }
         //reset the chunk variable
-        memset(recvChunk, 0 , 513);
+        memset(recvChunk, 0 , 512);
         if((bytesReceived = recv(sock, recvChunk , 512 , 0)) < 0){
             //delay if nothing was received, just for 0.1 seconds
             //in case more is on the way or being processed
@@ -448,7 +467,8 @@ char *handleResponse(int sock, int timeout, int localSock)
     gettimeofday(&start , NULL);
      
     //string to accumulate chunks
-    string responseCatch = "";
+    string responseCatch;
+
     while(1){
         //get the current time
         gettimeofday(&now , NULL);
@@ -477,7 +497,10 @@ char *handleResponse(int sock, int timeout, int localSock)
             gettimeofday(&start , NULL);
             //add received bytes to total
             totalBytes += bytesReceived;
-            responseCatch += recvChunk;
+            if(responseCatch.empty())
+                    responseCatch = recvChunk;
+            else
+                responseCatch += recvChunk;
             //stop when we receive last portion of html
             //if(strstr(recvChunk, "</html>"))
                 //break;
