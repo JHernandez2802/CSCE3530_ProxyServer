@@ -315,7 +315,7 @@ void *client_handler(void *args){
     	// Checks blacklist
 		for(int i = 0; i < blacklistTotal; i++){
             //site was found on blacklist
-			if (strcmp(blacklist[i],destination) == 0){
+			if (strcmp(blacklist[i],destination) == 0 || strcmp(blacklist[i],getName(temp)) == 0){
 				blacklisted = true;
                 fprintf(stderr, "Destination, %s, is blacklisted, exiting thread.\n", destination);
                 char* response = (char*)malloc(sizeof(char)*400);
@@ -327,8 +327,6 @@ void *client_handler(void *args){
 			}
 		}
 		
-        fprintf(stderr, "made is past blacklist\n");
-
 		// Checks if the IP is already in the cache DB
 		sprintf(strSql, "SELECT * FROM cache where IP='%s'", destination);
 		sql = &strSql[0];
@@ -350,7 +348,6 @@ void *client_handler(void *args){
         if(inet_pton(AF_INET, destination, &serverAddress.sin_addr)<=0)
         {
             fprintf(stderr, "Please pass an ip address.\n");
-            //exit(EXIT_FAILURE);
         }  
         serverAddress.sin_family = AF_INET;
         serverAddress.sin_port = htons(80);
@@ -391,10 +388,8 @@ void *client_handler(void *args){
 		{// Saves IP and response to DB if it is new
 			strcpy(IP, destination);
 			strcpy(data2, response);
-			sprintf(strSql, "INSERT INTO cache VALUES('%s','%s');", IP, data2);
-					
+			sprintf(strSql, "INSERT INTO cache VALUES('%s','%s');", IP, data2);	
 			sql = &strSql[0];
-					
 			rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
 		}
         //entry is already saved in cache and stored in data2 variable
@@ -404,7 +399,6 @@ void *client_handler(void *args){
         }
 		sqlite3_close(db);     
     }
-
     //close up stream to local system and free up other assets
    	close(sock);
     fflush(stderr);
@@ -468,7 +462,7 @@ char *handleResponse(int sock, int timeout, int localSock){
     strcpy(response, responseCatch.c_str());
     strcat(response, "\0");
 
-    //print total number of bytes received
+    //change total number of bytes received
     fprintf(stderr, "**Received %d bytes**\n", totalBytes);
 
     //change socket settings so it is non-blocking
