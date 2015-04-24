@@ -455,8 +455,7 @@ int getResponseSize(int sock, int timeout){
     return totalBytes;
 }
 
-char *handleResponse(int sock, int timeout, int localSock)
-{
+char *handleResponse(int sock, int timeout, int localSock){
     int bytesReceived = 0;
     int totalBytes= 0;
     struct timeval start, now;
