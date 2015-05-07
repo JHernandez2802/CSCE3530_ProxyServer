@@ -581,6 +581,7 @@ string replaceInsults(string data, s_insults insults[] ){
 			counter=0;
 		}
 	}
+	fprintf(stderr,"\nhit\n");
 	return newData;
 }
 

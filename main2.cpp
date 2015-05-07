@@ -632,7 +632,8 @@ string replaceInsults(string data, s_insults insults[] ){
 			//Looks ahead for new line characters and
 			//white-spaces to know that a word is complete
  			if(data[i+1]==' ' || data[i+1]=='\0' 
-			|| data[i+1]=='\r'|| data[i+1]=='\n'){
+			|| data[i+1]=='\r'|| data[i+1]=='\n'
+			|| data[i+1]=='<'){
 				//Runs if a word has been completed
 				if(checkInsults(compareStr,insults)){
 					//Replaces word and resets strings and counter
@@ -663,6 +664,7 @@ string replaceInsults(string data, s_insults insults[] ){
 			counter=0;
 		}
 	}
+	
 	return newData;
 }
 
