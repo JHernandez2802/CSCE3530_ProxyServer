@@ -87,7 +87,7 @@ int main(){
     //used INADDR_ANY for simplicity, allows server to run regardless of IP
     socketAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     //user port 65001
-    socketAddress.sin_port = htons(65001);
+    socketAddress.sin_port = htons(8888);
 
 	//bind socket address parameters to socket descriptor created above
     bind(listenfd, (struct sockaddr*)&socketAddress, sizeof(socketAddress)); 
@@ -342,7 +342,7 @@ int hostname_to_ip(char *name , char *ip){
 //make a request to the provided destination
 char* make_initial_request(char* destination, char* data){
 	char* request = (char*)malloc(sizeof(char)*400);
-	sprintf(request, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", data, destination);
+	sprintf(request, "GET %s HTTP/1.1\r\nHost: %s\r\nAccept: */*\r\nContent-Type: text/html\r\n\r\n", data, destination);
     strcpy(curHost, destination);
     fprintf(stderr, "Changed current host to: %s\n", curHost);
 	return request;
@@ -452,8 +452,12 @@ void *client_handler(void *args){
         
         //generate request based on passed destination
         char *request;
-        if(strstr(getName(temp),".com") || strstr(getName(temp),".edu") || strstr(getName(temp),".net") || strstr(getName(temp),".org"))
-            request = make_initial_request(destination, data);
+        if(strstr(getName(temp),".com") || strstr(getName(temp),".edu") || strstr(getName(temp),".net") || strstr(getName(temp),".org")){
+            char *host = (char*)malloc(sizeof(char)*100);
+            strcpy(host, getName(temp));
+            char* token3 = strtok(host, "/");
+            request = make_initial_request(token3, data);
+        }
         else{
             fprintf(stderr,"DATA REQUESTED: %s\n", getName(temp));
             request = make_successive_request(getName(temp));
