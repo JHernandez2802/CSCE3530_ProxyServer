@@ -33,8 +33,9 @@ struct s_insults{
 //predicates
 char* getDestination(char Buffer[1000]);
 char* getName(char Bufferr[1000]);
+char* getData(char Buffer[1000]);
 int hostname_to_ip(char *name , char *ip);
-char* make_initial_request(char* destination);
+char* make_initial_request(char* destination, char* data);
 char* make_successive_request(char* data);
 void *client_handler(void *args);
 char* handleResponse(int, int, int);
@@ -174,6 +175,10 @@ char* getDestination(char Buffer[1000]){
       		}
             char *ip = (char*)malloc(sizeof(char)*100);
             fprintf(stderr, "Destination: %s\n", temp);
+
+            char* token2 = strtok(temp, "/");
+            temp = token2;
+
             if(hostname_to_ip(temp , ip) != 1)
                 return ip;
             else
@@ -182,6 +187,82 @@ char* getDestination(char Buffer[1000]){
         //get next chunk
     	pci = strtok (NULL, " \n");
   	}
+}
+
+char* getData(char Buffer[1000]){
+    char tempBuff[1000];
+    strcpy(tempBuff, Buffer);
+
+    //pull the server name
+    char * pch;
+    pch = strtok (tempBuff,"\n");
+
+    char * pci;
+    pci = strtok (pch, " ");
+
+    while (pci != NULL){
+        //chunk with '/' as first character holds address
+        if(pci[0] == '/'){
+            char *temp = NULL;
+            char* placeholder;
+            //covers www.s and http://www.s
+            if((placeholder = strstr(pci, "www.")) != NULL){
+                //comment to filter out www. (not necessary)
+                //placeholder = placeholder + 4;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder))+1);
+                memcpy(temp, placeholder, (strlen(placeholder)));
+                int pos = strlen(placeholder);
+                temp[pos] = '\0';
+            }
+            //covers just http://
+            else if((placeholder = strstr(pci, "http://")) != NULL){
+                placeholder = placeholder + 7;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder))+1);
+                memcpy(temp, placeholder, (strlen(placeholder)));
+                int pos = strlen(placeholder);
+                temp[pos] = '\0';
+            }
+            else if((placeholder = strstr(pci, "https://")) != NULL){
+                placeholder = placeholder + 8;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder))+1);
+                memcpy(temp, placeholder, (strlen(placeholder)));
+                int pos = strlen(placeholder);
+                temp[pos] = '\0';
+            }
+            else{
+                placeholder = pci + 1;
+                temp = (char*)malloc(sizeof(char)*(strlen(placeholder))+1);
+                memcpy(temp, placeholder, (strlen(placeholder)));
+                int pos = strlen(placeholder);
+                temp[pos] = '\0';
+                //memcpy(temp, &pci[1], (strlen(pci)-1));               
+            }
+            char *ip = (char*)malloc(sizeof(char)*100);
+
+            char* token2 = strtok(temp, "/");
+            token2 = strtok(NULL, "/");
+            
+            char *data = (char*)malloc(sizeof(char)*200);
+            data[0] = '/';
+
+            while(token2 != NULL){
+                strcat(data, token2);
+                strcat(data, "/");
+                token2 = strtok(NULL, "/");
+            }
+            int pos = strlen(data);
+            pos--;
+            data[pos] = '\0';
+
+            temp = data;
+            if(temp != NULL)
+                return temp;
+            else
+                return NULL;
+        }
+        //get next chunk
+        pci = strtok (NULL, " \n");
+    }
 }
 
 //get the name of the destination (not ip) from request
@@ -259,21 +340,9 @@ int hostname_to_ip(char *name , char *ip){
 }
 
 //make a request to the provided destination
-char* make_initial_request(char* destination){
+char* make_initial_request(char* destination, char* data){
 	char* request = (char*)malloc(sizeof(char)*400);
-    char* data;
-
-    char* token;
-    token = strtok(destination, "/");
-    /* walk through other tokens */
-       while( token != NULL ) 
-       {
-          printf( " %s\n", token );
-        
-          token = strtok(NULL, s);
-       }
-
-	sprintf(request, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", "/", destination);
+	sprintf(request, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", data, destination);
     strcpy(curHost, destination);
     fprintf(stderr, "Changed current host to: %s\n", curHost);
 	return request;
@@ -318,12 +387,21 @@ void *client_handler(void *args){
 
         //turn destination name into ip address
     	char *destination = getDestination(temp);
+
+        char* data = getData(temp);
+        if (data == NULL || strcmp(data, "") == 0){
+            data = (char*)malloc(sizeof(char)*2);
+            strcpy(data, "/");
+        }
+
+
+
         //add a check to cancel out multiple requests with no destination
         if(destination == NULL){
             destination = (char*)malloc(sizeof(char)*strlen(curHost));
             strcpy(destination, curHost);
         }
-        fprintf(stderr, "Client %d: Destination is '%s', Source was '%s'\n", user, destination, arguments->ip);
+        fprintf(stderr, "Client %d: Destination is '%s', Data is '%s', Source was '%s'\n", user, destination, data, arguments->ip);
 		
     	// Checks blacklist
 		for(int i = 0; i < blacklistTotal; i++){
@@ -346,7 +424,7 @@ void *client_handler(void *args){
 		rc = sqlite3_exec(db, sql, getRecord, (void*)data, &zErrMsg);
 		// Flags newEntry that the IP is already in the DB
 		if (strlen(IP) < 3)
-			newEntry = false;
+			newEntry = true;
 
        	//create and initialize server connection
     	struct sockaddr_in serverAddress;
@@ -375,7 +453,7 @@ void *client_handler(void *args){
         //generate request based on passed destination
         char *request;
         if(strstr(getName(temp),".com") || strstr(getName(temp),".edu") || strstr(getName(temp),".net") || strstr(getName(temp),".org"))
-            request = make_initial_request(destination);
+            request = make_initial_request(destination, data);
         else{
             fprintf(stderr,"DATA REQUESTED: %s\n", getName(temp));
             request = make_successive_request(getName(temp));
